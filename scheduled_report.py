@@ -35,8 +35,8 @@ def main():
         # 4. 格式化报告
         content = format_report_for_dingtalk(skt_analysis, tp_analysis, df)
 
-        # 5. 推送到钉钉
-        success = send_to_dingtalk(DINGTALK_WEBHOOK, DINGTALK_SECRET, content)
+        # 5. 推送到钉钉（使用HTML格式）
+        success = send_to_dingtalk(DINGTALK_WEBHOOK, DINGTALK_SECRET, content, use_html=True)
 
         if success:
             print("✅ 定时任务执行成功")
