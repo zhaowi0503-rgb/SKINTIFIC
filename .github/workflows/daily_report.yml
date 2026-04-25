@@ -35,4 +35,4 @@ jobs:
         DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
         DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
       run: |
-        python scheduled_report.py
+        python scheduled_report_with_link.py
