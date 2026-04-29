@@ -21,7 +21,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install gspread google-auth pandas requests
+        pip install gspread google-auth pandas requests numpy
 
     - name: Create credentials file
       env:
@@ -35,4 +35,12 @@ jobs:
         DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
         DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
       run: |
-        python scheduled_report_with_link.py
+        python scheduled_report.py
+
+    - name: Commit and push HTML report
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add daily_report.html
+        git diff --staged --quiet || git commit -m "Update: Daily sales report $(date +'%Y-%m-%d %H:%M')"
+        git push
