@@ -6,7 +6,10 @@
 
 import sys
 import os
-sys.path.append('/Users/skintific')
+
+# 获取当前脚本所在目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
 
 from brand_sales_analysis import connect_and_load_data
 from dingtalk_push import send_to_dingtalk
@@ -31,8 +34,8 @@ def main():
         # 2. 生成HTML报告
         html_content = generate_full_report(df)
 
-        # 保存到文件
-        output_file = '/Users/skintific/daily_report.html'
+        # 保存到文件（使用相对路径，适配GitHub Actions）
+        output_file = os.path.join(current_dir, 'daily_report.html')
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(html_content)
 
@@ -59,17 +62,23 @@ def main():
 *生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
 """
 
+        print(f"准备推送到钉钉...")
+        print(f"Webhook URL: {DINGTALK_WEBHOOK[:50]}...")
+        print(f"Secret configured: {'Yes' if DINGTALK_SECRET else 'No'}")
+
         success = send_to_dingtalk(DINGTALK_WEBHOOK, DINGTALK_SECRET, markdown_content, use_html=False)
 
         if success:
             print("✅ 定时任务执行成功")
         else:
             print("❌ 钉钉推送失败")
+            sys.exit(1)
 
     except Exception as e:
         print(f"❌ 任务执行失败: {str(e)}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
