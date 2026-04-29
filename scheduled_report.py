@@ -8,8 +8,10 @@ import sys
 import os
 sys.path.append('/Users/skintific')
 
-from brand_sales_analysis import connect_and_load_data, analyze_brand
-from dingtalk_push import send_to_dingtalk, format_report_for_dingtalk
+from brand_sales_analysis import connect_and_load_data
+from dingtalk_push import send_to_dingtalk
+from generate_html_report import generate_full_report
+from datetime import datetime
 
 # 钉钉配置（优先使用环境变量，否则使用默认值）
 DINGTALK_WEBHOOK = os.getenv('DINGTALK_WEBHOOK', "https://oapi.dingtalk.com/robot/send?access_token=1cb6336bc58ab0740987d90bf7808549c35be0d77edd5a4398052cb6d6f06103")
@@ -26,17 +28,38 @@ def main():
         # 1. 加载数据
         df = connect_and_load_data()
 
-        # 2. 分析SKINTIFIC品牌
-        skt_analysis = analyze_brand(df, 'SKT', 'SKINTIFIC')
+        # 2. 生成HTML报告
+        html_content = generate_full_report(df)
 
-        # 3. 分析Timephoria品牌
-        tp_analysis = analyze_brand(df, 'TP', 'Timephoria')
+        # 保存到文件
+        output_file = '/Users/skintific/daily_report.html'
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(html_content)
 
-        # 4. 格式化报告
-        content = format_report_for_dingtalk(skt_analysis, tp_analysis, df)
+        print(f"✅ HTML报告已生成: {output_file}")
 
-        # 5. 推送到钉钉（使用HTML格式）
-        success = send_to_dingtalk(DINGTALK_WEBHOOK, DINGTALK_SECRET, content, use_html=True)
+        # 3. 推送到钉钉（使用Markdown格式，仅推送链接）
+        latest_date = df['Date'].max()
+        report_date = latest_date.strftime('%Y-%m-%d')
+
+        # 构建简洁的Markdown消息
+        markdown_content = f"""## 📊 品牌分析 - 销量日报
+
+**数据日期:** {report_date}
+
+**报告内容:**
+- 📊 渠道维度分析（近7天每日销量）
+- 🌍 国家维度分析（近7天每日销量）
+- 🏆 TOP 10 SKU 销量波动
+- 🚀 增长 SKU / 📉 下降 SKU
+
+👉 [点击查看完整报告](https://zhaowi0503-rgb.github.io/SKINTIFIC/daily_report.html)
+
+---
+*生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+
+        success = send_to_dingtalk(DINGTALK_WEBHOOK, DINGTALK_SECRET, markdown_content, use_html=False)
 
         if success:
             print("✅ 定时任务执行成功")
