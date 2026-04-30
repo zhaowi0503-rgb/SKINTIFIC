@@ -2,8 +2,8 @@ name: Daily Sales Report
 
 on:
   schedule:
-    # 每天 UTC 10:00 执行（北京时间 18:00）
-    - cron: '0 10 * * *'
+    # 每天 UTC 04:00 执行（北京时间 12:00，考虑GitHub Actions延迟，实际约18:00执行）
+    - cron: '0 4 * * *'
   workflow_dispatch:  # 允许手动触发
 
 permissions:
