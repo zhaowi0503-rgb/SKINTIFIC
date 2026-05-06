@@ -45,10 +45,17 @@ def main():
         latest_date = df['Date'].max()
         report_date = latest_date.strftime('%Y-%m-%d')
 
+        # 数据新鲜度检查：最新数据距今超过2天则告警
+        today = datetime.now().date()
+        days_behind = (today - latest_date.date()).days
+        freshness_warning = ""
+        if days_behind > 1:
+            freshness_warning = f"\n\n> ⚠️ **数据源过期告警**：最新数据日期为 {report_date}，距今已 {days_behind} 天未更新，请检查 Google Sheets 数据源！\n"
+
         # 构建简洁的Markdown消息
         markdown_content = f"""## 📊 品牌分析 - 销量日报
 
-**数据日期:** {report_date}
+**数据日期:** {report_date}{freshness_warning}
 
 **报告内容:**
 - 📊 渠道维度分析（近7天每日销量）
