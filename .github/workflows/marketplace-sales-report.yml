@@ -1,0 +1,108 @@
+name: Marketplace Sales Report
+
+on:
+  schedule:
+    # 20:00 Asia/Shanghai, Monday through Friday.
+    - cron: "0 12 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Report mode; leave scheduled for weekday routing
+        required: true
+        default: scheduled
+        type: choice
+        options:
+          - scheduled
+          - mtd
+          - dod
+      report_end:
+        description: Optional T-1 date (YYYY-MM-DD) for manual runs
+        required: false
+        type: string
+      force:
+        description: Re-upload and retry every DingTalk target
+        required: true
+        default: false
+        type: boolean
+      dry_run:
+        description: Validate data and message without uploading or notifying
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: marketplace-sales-report
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: feimei
+          install_components: bq
+
+      - name: Set up Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: "1.10.18"
+
+      - name: Publish scheduled report
+        env:
+          GCP_PROJECT_ID: feimei
+          MARKETPLACE_REPORT_BUCKET: feimei-marketplace-sales-reports
+          MARKETPLACE_REPORT_CLOUDSDK_CONFIG: ${{ runner.temp }}/gcloud-marketplace-report
+          MARKETPLACE_PERIOD_REPORT_STATE_FILE: ${{ runner.temp }}/marketplace-period-state.json
+          MARKETPLACE_PERIOD_REMOTE_STATE_OBJECT: publisher-state/marketplace-period-state.json
+          DINGTALK_NAME: ${{ secrets.DINGTALK_NAME }}
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
+          DINGTALK_NAME_2: ${{ secrets.DINGTALK_NAME_2 }}
+          DINGTALK_WEBHOOK_2: ${{ secrets.DINGTALK_WEBHOOK_2 }}
+          DINGTALK_SECRET_2: ${{ secrets.DINGTALK_SECRET_2 }}
+          DINGTALK_NAME_3: ${{ secrets.DINGTALK_NAME_3 }}
+          DINGTALK_WEBHOOK_3: ${{ secrets.DINGTALK_WEBHOOK_3 }}
+          DINGTALK_SECRET_3: ${{ secrets.DINGTALK_SECRET_3 }}
+          DINGTALK_NAME_4: ${{ secrets.DINGTALK_NAME_4 }}
+          DINGTALK_WEBHOOK_4: ${{ secrets.DINGTALK_WEBHOOK_4 }}
+          DINGTALK_SECRET_4: ${{ secrets.DINGTALK_SECRET_4 }}
+        run: |
+          args=(--scheduled)
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            args=()
+            if [[ "${{ inputs.mode }}" == "scheduled" ]]; then
+              args+=(--scheduled)
+            else
+              args+=(--mode "${{ inputs.mode }}")
+            fi
+            if [[ -n "${{ inputs.report_end }}" ]]; then
+              args+=(--report-end "${{ inputs.report_end }}")
+            fi
+            if [[ "${{ inputs.force }}" == "true" ]]; then
+              args+=(--force)
+            fi
+            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+              args+=(--dry-run)
+            fi
+          fi
+          node automations/marketplace-sales-daily/publish/publish_marketplace_period_to_gcs.js "${args[@]}"
