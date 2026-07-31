@@ -4,6 +4,9 @@
 <dict>
   <key>Label</key>
   <string>com.skintific.marketplace-daily-publish</string>
+
+  <key>Disabled</key>
+  <true/>
   <key>ProgramArguments</key>
   <array>
     <string>/Users/skintific/automations/marketplace-sales-daily/publish/run_marketplace_scheduled_publish.sh</string>
