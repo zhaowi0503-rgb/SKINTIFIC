@@ -1,0 +1,112 @@
+<script>
+(() => {
+  const toolbar = document.querySelector(".report-toolbar");
+  if (!toolbar) return;
+
+  const brandButtons = [...toolbar.querySelectorAll("[data-brand-filter]")];
+  const viewButtons = [...toolbar.querySelectorAll("[data-view-filter]")];
+  const brandCards = [...document.querySelectorAll(".brand-card[data-brand]")];
+  const viewSections = [...document.querySelectorAll("[data-report-view]")];
+  const searchInput = toolbar.querySelector("[data-product-search]");
+  const expandButton = toolbar.querySelector("[data-expand-details]");
+  const clearButton = document.querySelector("[data-clear-filters]");
+  const statusText = document.querySelector("[data-result-status]");
+  let activeBrand = "all";
+  let activeView = "all";
+  let detailsExpanded = false;
+
+  const normalize = (value) =>
+    String(value || "")
+      .trim()
+      .toLocaleLowerCase("zh-CN");
+
+  function setPressed(buttons, attribute, value) {
+    buttons.forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.getAttribute(attribute) === value));
+    });
+  }
+
+  function applyFilters() {
+    const query = normalize(searchInput.value);
+    let visibleProducts = 0;
+    let totalProducts = 0;
+
+    setPressed(brandButtons, "data-brand-filter", activeBrand);
+    setPressed(viewButtons, "data-view-filter", activeView);
+
+    brandCards.forEach((card) => {
+      card.hidden = activeBrand !== "all" && card.dataset.brand !== activeBrand;
+    });
+
+    viewSections.forEach((section) => {
+      section.hidden = activeView !== "all" && section.dataset.reportView !== activeView;
+    });
+
+    document.querySelectorAll(".analysis-column").forEach((column) => {
+      let columnVisible = 0;
+      column.querySelectorAll(".product-item").forEach((item) => {
+        totalProducts += 1;
+        const matches = !query || normalize(item.dataset.search).includes(query);
+        item.hidden = !matches;
+        if (matches) {
+          visibleProducts += 1;
+          columnVisible += 1;
+        }
+      });
+      column.classList.toggle("is-search-empty", Boolean(query) && columnVisible === 0);
+    });
+
+    const visibleBrands = brandCards.filter((card) => !card.hidden).length;
+    statusText.textContent = query
+      ? `已匹配 ${visibleProducts} / ${totalProducts} 个产品条目`
+      : `当前显示 ${visibleBrands} 个品牌 · ${activeView === "all" ? "完整视图" : activeView === "channel" ? "渠道视图" : "产品视图"}`;
+  }
+
+  brandButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      activeBrand = button.dataset.brandFilter;
+      applyFilters();
+      const firstVisible = brandCards.find((card) => !card.hidden);
+      if (activeBrand !== "all" && firstVisible) firstVisible.scrollIntoView({ block: "start" });
+    });
+  });
+
+  viewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      activeView = button.dataset.viewFilter;
+      applyFilters();
+    });
+  });
+
+  searchInput.addEventListener("input", () => {
+    if (searchInput.value && activeView === "channel") activeView = "product";
+    applyFilters();
+  });
+
+  expandButton.addEventListener("click", () => {
+    detailsExpanded = !detailsExpanded;
+    document.querySelectorAll(".sku-details").forEach((detail) => {
+      if (!detail.closest("[hidden]")) detail.open = detailsExpanded;
+    });
+    expandButton.textContent = detailsExpanded ? "收起明细" : "展开明细";
+    expandButton.setAttribute("aria-pressed", String(detailsExpanded));
+  });
+
+  clearButton.addEventListener("click", () => {
+    activeBrand = "all";
+    activeView = "all";
+    searchInput.value = "";
+    applyFilters();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  document.querySelectorAll(".analysis-column .sku-list").forEach((list) => {
+    const empty = document.createElement("p");
+    empty.className = "search-empty";
+    empty.textContent = "当前筛选下没有匹配产品。";
+    list.after(empty);
+  });
+
+  applyFilters();
+})();
+</script>
