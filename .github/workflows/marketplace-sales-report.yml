@@ -13,6 +13,7 @@ on:
         type: choice
         options:
           - scheduled
+          - monthly
           - mtd
           - dod
       report_end:
@@ -74,6 +75,7 @@ jobs:
           MARKETPLACE_REPORT_CLOUDSDK_CONFIG: ${{ runner.temp }}/gcloud-marketplace-report
           MARKETPLACE_PERIOD_REPORT_STATE_FILE: ${{ runner.temp }}/marketplace-period-state.json
           MARKETPLACE_PERIOD_REMOTE_STATE_OBJECT: publisher-state/marketplace-period-state.json
+          MARKETPLACE_SCHEDULE_OVERRIDE: ${{ vars.MARKETPLACE_SCHEDULE_OVERRIDE }}
           DINGTALK_NAME: ${{ secrets.DINGTALK_NAME }}
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
@@ -88,6 +90,13 @@ jobs:
           DINGTALK_SECRET_4: ${{ secrets.DINGTALK_SECRET_4 }}
         run: |
           args=(--scheduled)
+          if [[ "${{ github.event_name }}" == "schedule" && -n "$MARKETPLACE_SCHEDULE_OVERRIDE" ]]; then
+            IFS='|' read -r override_date override_mode override_end <<< "$MARKETPLACE_SCHEDULE_OVERRIDE"
+            today="$(TZ=Asia/Shanghai date +%F)"
+            if [[ "$today" == "$override_date" ]]; then
+              args=(--mode "$override_mode" --report-end "$override_end")
+            fi
+          fi
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             args=()
             if [[ "${{ inputs.mode }}" == "scheduled" ]]; then
