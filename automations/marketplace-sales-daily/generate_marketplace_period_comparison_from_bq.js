@@ -926,6 +926,16 @@ function inclusiveDays(start, end) {
 const currentPeriodLabel = zhPeriod(currentStart, currentEnd);
 const baselinePeriodLabel = zhPeriod(baselineStart, baselineEnd);
 const currentDays = inclusiveDays(currentStart, currentEnd);
+const isMonthEnd = (dateString) => {
+  const value = new Date(`${dateString}T00:00:00Z`);
+  const nextDay = new Date(value.getTime() + 86400000);
+  return nextDay.getUTCMonth() !== value.getUTCMonth();
+};
+const isFullMonthComparison =
+  currentStart.slice(8) === "01" &&
+  baselineStart.slice(8) === "01" &&
+  isMonthEnd(currentEnd) &&
+  isMonthEnd(baselineEnd);
 const isMonthlySamePeriod =
   currentStart.slice(8) === "01" &&
   baselineStart.slice(8) === "01" &&
@@ -934,11 +944,13 @@ const isMonthlySamePeriod =
 const reportTypeLabel =
   currentDays === 7
     ? "销量周报"
-    : isMonthlySamePeriod
-      ? "销量月度同期报告"
-      : "销量周期报告";
+    : isFullMonthComparison
+      ? "销量月度对比报告"
+      : isMonthlySamePeriod
+        ? "销量月度同期报告"
+        : "销量周期报告";
 const attentionTitle = currentDays === 7 ? "本周需关注" : "本期需关注";
-const movementLabel = currentDays === 7 ? "周环比" : "同期变化";
+const movementLabel = currentDays === 7 ? "周环比" : isFullMonthComparison ? "月环比" : "同期变化";
 
 const overall = metricRows.find((row) => row.level === "overall");
 const brandMetrics = metricRows

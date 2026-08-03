@@ -131,8 +131,8 @@ function resolveSchedule() {
     else return { skip: true, reason: `${weekday} is not a scheduled push day`, today };
   }
 
-  if (!["mtd", "dod"].includes(mode)) {
-    throw new Error("Use --scheduled or provide --mode mtd|dod");
+  if (!["mtd", "dod", "monthly"].includes(mode)) {
+    throw new Error("Use --scheduled or provide --mode mtd|dod|monthly");
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(reportEnd)) {
     throw new Error("--report-end must use YYYY-MM-DD");
@@ -151,6 +151,25 @@ function resolveSchedule() {
   }
 
   const baselineStart = previousMonthStart(reportEnd);
+  if (mode === "monthly") {
+    if (dateParts(reportEnd).day !== daysInMonth(reportEnd)) {
+      throw new Error("--mode monthly requires --report-end to be the final day of a month");
+    }
+    return {
+      skip: false,
+      mode,
+      reportEnd,
+      currentStart: startOfMonth(reportEnd),
+      currentEnd: reportEnd,
+      baselineStart,
+      baselineEnd: formatDate(
+        dateParts(baselineStart).year,
+        dateParts(baselineStart).month,
+        daysInMonth(baselineStart),
+      ),
+    };
+  }
+
   const baselineDay = Math.min(dateParts(reportEnd).day, daysInMonth(baselineStart));
   return {
     skip: false,
@@ -462,7 +481,7 @@ function publicUrl(objectName) {
 }
 
 function objectPrefix(period) {
-  const folder = period.mode === "mtd" ? "mtd" : "daily";
+  const folder = period.mode === "monthly" ? "monthly" : period.mode === "mtd" ? "mtd" : "daily";
   return `${folder}/${period.reportEnd.replaceAll("-", "/")}`;
 }
 
@@ -544,7 +563,12 @@ function periodLabel(period) {
 }
 
 function buildDingTalkMessage(manifest) {
-  const typeName = manifest.report_type === "mtd" ? "MTD销量对比" : "日销量环比";
+  const typeName =
+    manifest.report_type === "monthly"
+      ? "月度销量对比"
+      : manifest.report_type === "mtd"
+        ? "MTD销量对比"
+        : "日销量环比";
   const lines = [
     `# Marketplace ${typeName}｜${manifest.current_period.end}`,
     "",
@@ -656,7 +680,12 @@ async function main() {
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     activateServiceAccount();
     const prefix = objectPrefix(period);
-    const latestPrefix = period.mode === "mtd" ? "latest-mtd" : "latest-daily";
+    const latestPrefix =
+      period.mode === "monthly"
+        ? "latest-monthly"
+        : period.mode === "mtd"
+          ? "latest-mtd"
+          : "latest-daily";
     const uploads = [
       [paths.us, `${prefix}/us.html`, "text/html; charset=utf-8"],
       [paths.other_countries, `${prefix}/other-countries.html`, "text/html; charset=utf-8"],

@@ -82,8 +82,20 @@ GitHub Actions 工作流 `.github/workflows/marketplace-sales-report.yml` 在北
 
 GitHub Actions 使用 `0 12 * * 1-5`（UTC）对应北京时间 20:00，并通过
 `publisher-state/marketplace-period-state.json` 在 Cloud Storage 保存通知状态，避免手动重跑或
-Actions 重试时重复通知已经成功的群。工作流支持手动指定 `mtd` / `dod`、报告截止日期、
+Actions 重试时重复通知已经成功的群。工作流支持手动指定 `monthly` / `mtd` / `dod`、报告截止日期、
 强制重推和 dry-run。
+
+完整自然月对比使用 `monthly` 模式。该模式要求报告截止日期为月末，并自动使用上一个
+完整自然月作为基准：
+
+```bash
+automations/marketplace-sales-daily/publish/run_marketplace_scheduled_publish.sh \
+  --mode monthly --report-end 2026-07-31 --force --cloud-only
+```
+
+临时替换某一天的定时报告时，可设置 GitHub Actions Variable
+`MARKETPLACE_SCHEDULE_OVERRIDE`，格式为 `执行日期|模式|报告截止日期`，例如
+`2026-08-03|monthly|2026-07-31`。覆盖只在指定北京时间日期生效，之后自动恢复正常规则。
 
 仓库需要配置 `GOOGLE_CREDENTIALS`，以及每个群对应的 `DINGTALK_NAME[_N]`、
 `DINGTALK_WEBHOOK[_N]`、`DINGTALK_SECRET[_N]` GitHub Actions Secrets。所有凭证只保存在
