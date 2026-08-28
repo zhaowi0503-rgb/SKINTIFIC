@@ -1,15 +1,10 @@
 name: Marketplace Sales Report
 
 on:
-  schedule:
-    # Start just before 20:00 Asia/Shanghai to avoid GitHub's top-of-hour queue peak.
-    - cron: "58 11 * * 1-5"
-    # Backup trigger; persisted Cloud state prevents duplicate notifications.
-    - cron: "10 12 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
-        description: Report mode; leave scheduled for weekday routing
+        description: Report mode; leave scheduled for Cloud Scheduler dispatch
         required: true
         default: scheduled
         type: choice
