@@ -29,8 +29,7 @@ const STATE_FILE =
   process.env.MARKETPLACE_PERIOD_REPORT_STATE_FILE ||
   "/Users/skintific/private/runtime/marketplace-period-publisher/state.json";
 const REMOTE_STATE_OBJECT = process.env.MARKETPLACE_PERIOD_REMOTE_STATE_OBJECT || "";
-const MAIN_TABLE = "`feimei.raw_google_sheets.ec_sales_allin_sales_summary`";
-const MX_TABLE = "`feimei.raw_google_sheets.ec_sales_mexico_allin_sales_summary`";
+const { MAIN_TABLE, MX_TABLE, SOURCE_VERSION, CUTOVER_DATE, apiCompleteness } = require('../sales_report_source');
 const TIME_ZONE = "Asia/Shanghai";
 let cachedAccessToken = null;
 let cloudAuthenticated = false;
@@ -186,7 +185,7 @@ function resolveSchedule() {
   };
 }
 
-function completeness(reportEnd) {
+function legacyCompleteness(reportEnd) {
   const rows = query(`
     WITH params AS (SELECT DATE '${reportEnd}' AS report_date),
     source AS (
@@ -358,7 +357,7 @@ function reportPaths(period) {
   };
 }
 
-function generate(period) {
+function generate(period, validation) {
   run(
     process.execPath,
     [
@@ -368,7 +367,7 @@ function generate(period) {
       period.baselineStart,
       period.baselineEnd,
     ],
-    { stdio: "inherit" },
+    { stdio: "inherit", env: { MARKETPLACE_REPORT_VALIDATION: JSON.stringify(validation) } },
   );
 }
 
@@ -495,6 +494,8 @@ function buildManifest(period, metrics, validation) {
     baseline_period: { start: period.baselineStart, end: period.baselineEnd },
     data_complete: validation.dataComplete,
     missing_sources: validation.missingSources,
+    validation,
+    source_version: SOURCE_VERSION,
     reports: {
       us: { ...metrics.us, url: publicUrl(`${prefix}/us.html`) },
       other_countries: {
@@ -577,11 +578,16 @@ function buildDingTalkMessage(manifest) {
         ? `${manifest.current_period.end} vs ${manifest.baseline_period.end}`
         : `${manifest.current_period.start} 至 ${manifest.current_period.end} vs ${manifest.baseline_period.start} 至 ${manifest.baseline_period.end}`
     }`,
-    manifest.data_complete
-      ? "> 数据完整性：通过"
+    manifest.validation?.sourceVersion
+      ? `> 数据源：正式 API 销量表；${manifest.validation.sourceComplete ? `截止日采集已核验 ${manifest.validation.verifiedAccounts}/${manifest.validation.accountCount} 账户` : '截止日采集完整性待核验'}。销量为已匹配公司件数。`
+      : manifest.data_complete
+      ? "> 销量行检查：通过（不等同源端完整性证明）"
       : `> ⚠️ 数据完整性警告：${manifest.missing_sources
           .map(({ scope, brand, channel }) => `${scope} / ${brand} / ${channel}`)
           .join("、")}`,
+    ...(manifest.validation?.warnings || []).map(warning => `> ⚠️ ${warning}`),
+    ...(manifest.current_period.start >= CUTOVER_DATE && manifest.baseline_period.end < CUTOVER_DATE
+      ? ['> 对比提示：本期为 API 公司件数，对比期为原手工销量，来源口径存在切换。'] : []),
     "",
   ];
   const labels = [
@@ -628,9 +634,11 @@ async function main() {
     return;
   }
 
-  loadRemoteState();
+  if (!dryRun) loadRemoteState();
   const reportKey = `${period.mode}:${period.reportEnd}`;
-  const validation = completeness(period.reportEnd);
+  const validation = period.currentEnd >= CUTOVER_DATE
+    ? apiCompleteness(query, period)
+    : legacyCompleteness(period.reportEnd);
   const metrics = reportMetrics(period);
   const manifest = buildManifest(period, metrics, validation);
   const paths = reportPaths(period);
@@ -639,7 +647,8 @@ async function main() {
   state.notifications = state.notifications || {};
   state.notifications[reportKey] = state.notifications[reportKey] || {};
   const targets = dingTalkTargets();
-  const needsUpload = force || !state.reports[reportKey]?.uploaded_at;
+  const needsUpload = force || !state.reports[reportKey]?.uploaded_at ||
+    state.reports[reportKey]?.source_version !== SOURCE_VERSION;
   const pendingTargets = cloudOnly
     ? []
     : targets.filter((target) => force || !state.notifications[reportKey][target.id]);
@@ -669,7 +678,7 @@ async function main() {
   }
 
   if (needsUpload) {
-    generate(period);
+    generate(period, validation);
     for (const file of Object.values(paths)) {
       if (!fs.existsSync(file)) throw new Error(`Generated report missing: ${file}`);
     }
@@ -707,7 +716,7 @@ async function main() {
       verifyUrl(manifest.reports.mexico.url, "text/html"),
       verifyUrl(publicUrl(`${latestPrefix}/manifest.json`), "application/json"),
     ]);
-    state.reports[reportKey] = { uploaded_at: new Date().toISOString() };
+    state.reports[reportKey] = { uploaded_at: new Date().toISOString(), source_version: SOURCE_VERSION };
     writeState(state);
   }
 

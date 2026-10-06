@@ -23,35 +23,7 @@ const currentEnd = process.argv[3] || "2026-07-05";
 const baselineStart = process.argv[4] || "2026-06-01";
 const baselineEnd = process.argv[5] || "2026-06-05";
 const requestedScope = process.argv[6];
-const MAIN_TABLE = "`feimei.raw_google_sheets.ec_sales_allin_sales_summary`";
-const MX_TABLE = "`feimei.raw_google_sheets.ec_sales_mexico_allin_sales_summary`";
-const SALES_COLUMNS = [
-  "date",
-  "id",
-  "sku_code",
-  "unit",
-  "gmv",
-  "sku_zh",
-  "sku_en",
-  "product_name",
-  "spu_en",
-  "brand",
-  "channels",
-  "region",
-  "source_spreadsheet_id",
-  "source_sheet_gid",
-  "synced_at",
-].join(", ");
-const MX_REPORT_SOURCE = `(
-  SELECT ${SALES_COLUMNS}
-  FROM ${MX_TABLE}
-  WHERE UPPER(TRIM(COALESCE(channels, ''))) != 'SHOPIFY'
-  UNION ALL
-  SELECT ${SALES_COLUMNS}
-  FROM ${MAIN_TABLE}
-  WHERE TRIM(region) = 'Mexico'
-    AND UPPER(TRIM(COALESCE(channels, ''))) = 'SHOPIFY'
-)`;
+const { MAIN_TABLE, MX_REPORT_SOURCE, CUTOVER_DATE, apiCompleteness } = require('./sales_report_source');
 
 const scopes = {
   all: {
@@ -565,6 +537,11 @@ WHERE current_pcs != 0 OR baseline_pcs != 0
 ORDER BY brand, product_key, row_type, ABS(diff_pcs) DESC
 `;
 
+const publicationValidation = currentEnd >= CUTOVER_DATE
+  ? (process.env.MARKETPLACE_REPORT_VALIDATION
+    ? JSON.parse(process.env.MARKETPLACE_REPORT_VALIDATION)
+    : apiCompleteness(query, { currentStart, currentEnd, baselineStart, baselineEnd }))
+  : null;
 const metricRows = query(metricsSql).map(parseMetricRow);
 const analysisRows = query(skuSql).map(parseProductRow);
 const productRows = analysisRows.filter((row) => row.rowType === "product");
@@ -960,7 +937,7 @@ const channelMetrics = metricRows.filter((row) => row.level === "channel");
 const regionMetrics = metricRows
   .filter((row) => row.level === "region")
   .sort((a, b) => b.current - a.current);
-const incompleteCoverageRows = coverageRows.filter(
+const incompleteCoverageRows = publicationValidation ? [] : coverageRows.filter(
   (row) =>
     row.baselineDays > 0 &&
     row.latestCurrentDate !== currentEnd &&
@@ -1091,10 +1068,13 @@ const brands = brandMetrics.map((raw) => {
   };
 });
 
-const warnings = incompleteCoverageRows.map((row) => {
+const warnings = publicationValidation ? [...publicationValidation.warnings] : incompleteCoverageRows.map((row) => {
   const latest = row.latestCurrentDate || "无当前期记录";
   return `${row.brand} / ${row.channel} 当前期数据仅到 ${latest}，未覆盖周期截止日 ${currentEnd}；该渠道及相关汇总可能偏低。`;
 });
+if (currentStart >= CUTOVER_DATE && baselineEnd < CUTOVER_DATE) {
+  warnings.push('来源切换提示：本期为 API 已匹配公司件数，对比期保留原手工销量，口径可能存在差异。');
+}
 
 function countrySection(rows) {
   if (scope !== "other" || !rows.length) return "";
@@ -1164,7 +1144,9 @@ function attentionPanel() {
   const weakestBrand = [...brands].sort((a, b) => a.raw.diff - b.raw.diff)[0];
   const weakestChannel = allChannels[0];
   const weakestProduct = allDragProducts[0];
-  const warningLabel = warnings.length ? `${warnings.length} 个渠道数据不完整` : "数据完整";
+  const warningLabel = publicationValidation
+    ? (publicationValidation.dataComplete ? "截止日采集已核验" : "请查看采集及待匹配提示")
+    : (warnings.length ? `${warnings.length} 项数据提醒` : "销量行检查通过");
 
   return `<section class="attention-strip" aria-labelledby="attention-title">
     <div class="attention-head">
@@ -1174,7 +1156,7 @@ function attentionPanel() {
     <div class="attention-item">
       <span>数据状态</span>
       <strong>${escapeHtml(warningLabel)}</strong>
-      <small>${warnings.length ? "相关汇总可能偏低" : "已覆盖周期截止日"}</small>
+      <small>${publicationValidation ? "正式销量表 · 已匹配公司件数" : "销量行存在不等同源端完整"}</small>
     </div>
     <div class="attention-item">
       <span>主要下行</span>
