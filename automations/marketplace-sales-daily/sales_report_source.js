@@ -1,7 +1,7 @@
 // Shared contract for the scheduled message and its linked HTML reports.
 // The Mart owns the 2026-09-25 API cutover and preserves earlier manual history.
 const CUTOVER_DATE = "2026-09-25";
-const SOURCE_VERSION = "order-api-mart-v1";
+const SOURCE_VERSION = "order-api-mart-v3-regions-5-nav";
 const MART_MAIN = "feimei.mart_marketplace.fact_channel_sales_daily";
 const MART_MX = "feimei.mart_marketplace.fact_channel_sales_daily_mx";
 const EXPECTED_ACCOUNTS = 31; // 2026-10-04 approved publication contract.
@@ -26,6 +26,49 @@ const MX_REPORT_SOURCE = `(SELECT * FROM ${MX_TABLE}
   WHERE UPPER(TRIM(COALESCE(channels, ''))) != 'SHOPIFY'
   UNION ALL SELECT * FROM ${MAIN_TABLE}
   WHERE TRIM(region) = 'Mexico' AND UPPER(TRIM(channels)) = 'SHOPIFY')`;
+
+const REPORT_SCOPES = Object.freeze([
+  {
+    key: "us",
+    title: "美国",
+    file: "us",
+    object: "us.html",
+    table: "main",
+    filter: "TRIM(region) = 'United States'",
+  },
+  {
+    key: "mexico",
+    title: "墨西哥",
+    file: "mexico",
+    object: "mexico.html",
+    table: "mx",
+    filter: "TRUE",
+  },
+  {
+    key: "uk",
+    title: "英国",
+    file: "uk",
+    object: "uk.html",
+    table: "main",
+    filter: "TRIM(region) = 'United Kingdom'",
+  },
+  {
+    key: "japan",
+    title: "日本",
+    file: "japan",
+    object: "japan.html",
+    table: "main",
+    filter: "TRIM(region) = 'Japan'",
+  },
+  {
+    key: "other_countries",
+    title: "其他国家",
+    file: "other_countries",
+    object: "other-countries.html",
+    table: "main",
+    filter: "TRIM(region) NOT IN ('United States', 'Mexico', 'United Kingdom', 'Japan')",
+  },
+]);
 
 function assessPublication(statusRows, exceptionRows, period, now = new Date()) {
   const warnings = [];
@@ -87,5 +130,5 @@ function apiCompleteness(query, period) {
 
 module.exports = {
   MAIN_TABLE, MX_TABLE, MX_REPORT_SOURCE, MART_MAIN, MART_MX,
-  CUTOVER_DATE, SOURCE_VERSION, assessPublication, apiCompleteness,
+  CUTOVER_DATE, SOURCE_VERSION, REPORT_SCOPES, assessPublication, apiCompleteness,
 };

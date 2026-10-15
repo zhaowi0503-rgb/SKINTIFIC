@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { assessPublication, MAIN_TABLE, MX_REPORT_SOURCE } = require('./sales_report_source');
+const { assessPublication, MAIN_TABLE, MX_REPORT_SOURCE, REPORT_SCOPES } = require('./sales_report_source');
 const now = new Date('2026-10-06T11:40:00Z');
 const period = { currentStart: '2026-10-05', currentEnd: '2026-10-05', baselineStart: '2026-10-04', baselineEnd: '2026-10-04' };
 function statuses() {
@@ -41,4 +41,20 @@ test('all report consumers use Mart, with Mexico Shopify only from main', () => 
   assert.ok(!MAIN_TABLE.includes('raw_google_sheets'));
   assert.match(MX_REPORT_SOURCE, /!= 'SHOPIFY'/);
   assert.match(MX_REPORT_SOURCE, /region\) = 'Mexico' AND UPPER\(TRIM\(channels\)\) = 'SHOPIFY'/);
+});
+test('scheduled report contract has five non-overlapping regional outputs', () => {
+  assert.deepEqual(
+    REPORT_SCOPES.map(({ key }) => key),
+    ['us', 'mexico', 'uk', 'japan', 'other_countries'],
+  );
+  assert.deepEqual(
+    REPORT_SCOPES.map(({ object }) => object),
+    ['us.html', 'mexico.html', 'uk.html', 'japan.html', 'other-countries.html'],
+  );
+  assert.match(REPORT_SCOPES.find(({ key }) => key === 'uk').filter, /United Kingdom/);
+  assert.match(REPORT_SCOPES.find(({ key }) => key === 'japan').filter, /Japan/);
+  assert.match(
+    REPORT_SCOPES.find(({ key }) => key === 'other_countries').filter,
+    /United Kingdom.*Japan/,
+  );
 });

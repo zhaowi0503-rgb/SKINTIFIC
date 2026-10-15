@@ -27,6 +27,59 @@ body {
   border: 0;
 }
 
+.report-switcher {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 8px;
+}
+
+.report-switcher-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.report-switcher-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-switcher a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.report-switcher a:hover {
+  border-color: #9bb6cc;
+  background: var(--blue-bg);
+}
+
+.report-switcher a[aria-current="page"] {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.report-switcher a:focus-visible {
+  outline: 3px solid rgba(36, 95, 145, 0.26);
+  outline-offset: 2px;
+}
+
 .report-toolbar {
   position: sticky;
   top: 0;
@@ -257,6 +310,25 @@ body {
     --toolbar-height: 112px;
   }
 
+  .report-switcher {
+    align-items: flex-start;
+    gap: 7px;
+  }
+
+  .report-switcher-label {
+    padding-top: 10px;
+  }
+
+  .report-switcher-links {
+    gap: 5px;
+  }
+
+  .report-switcher a {
+    min-height: 36px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
   .report-toolbar {
     top: 0;
     grid-template-columns: 1fr auto;
@@ -317,6 +389,7 @@ body {
 }
 
 @media print {
+  .report-switcher,
   .report-toolbar,
   .report-status {
     display: none !important;

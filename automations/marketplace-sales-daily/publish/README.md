@@ -1,8 +1,10 @@
 # Marketplace 日报发布器
 
-默认以北京时间昨日为日报日期，生成美国、其他国家、墨西哥三份 HTML，上传到 Cloud Storage，并在配置钉钉机器人后发送群消息。即使部分品牌/渠道缺数也会按时发布，但会在钉钉简报和 HTML 中明确警告，并将缺失渠道排除出汇总和变化分析。
+默认以北京时间昨日为日报日期，生成美国、墨西哥、英国、日本、其他国家五份 HTML，上传到 Cloud Storage，并在配置钉钉机器人后发送群消息。即使部分品牌/渠道缺数也会按时发布，但会在钉钉简报和 HTML 中明确警告，并将缺失渠道排除出汇总和变化分析。
 
-墨西哥报告的数据源为互斥组合：墨西哥独立表排除 `SHOPIFY`，再合并主销量表中 `region = 'Mexico' AND channel = 'SHOPIFY'` 的数据。完整性校验和钉钉汇总使用同一组合口径。
+每份 HTML 顶部都提供美国、墨西哥、英国、日本、其他国家五个地区入口；本地单独生成时链接同批次的本地文件，正式发布时链接当期 dated Cloud Storage 对象，因此从 dated、`latest-mtd`、`latest-daily` 或 `latest` 打开的页面都能互相跳转。
+
+地区报告口径为：美国、英国、日本直接按主销量表的 `region` 过滤；其他国家排除美国、墨西哥、英国、日本；墨西哥报告的数据源为互斥组合：墨西哥独立表排除 `SHOPIFY`，再合并主销量表中 `region = 'Mexico' AND channel = 'SHOPIFY'` 的数据。完整性校验和钉钉汇总使用同一组合口径。
 
 墨西哥 Shopify 按共享渠道源判断完整性：当日只要任一品牌有 Shopify 数据，其他品牌无订单按真实 0 处理；只有整个墨西哥 Shopify 渠道当日都无数据时才预警。
 
@@ -15,7 +17,8 @@
 - `automations/marketplace-sales-daily/quarto/report-interactions.html`
 
 生成时会在 `generated/quarto-source/marketplace-sales-daily/` 保留对应 `.qmd`
-及渲染资源，便于复查页面结构。最终 HTML 文件名和 GCS 发布路径保持不变。
+及渲染资源，便于复查页面结构。美国、墨西哥、其他国家的既有文件名和 GCS
+路径保持不变，并新增英国 `uk.html` 与日本 `japan.html`。
 
 生成器依次查找 `QUARTO_BIN`、项目私有运行目录和 macOS 常见安装路径。
 当前固定验证版本为 Quarto `1.10.18`。

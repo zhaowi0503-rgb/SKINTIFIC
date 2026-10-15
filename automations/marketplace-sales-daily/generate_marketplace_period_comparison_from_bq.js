@@ -22,8 +22,14 @@ const currentStart = process.argv[2] || "2026-07-01";
 const currentEnd = process.argv[3] || "2026-07-05";
 const baselineStart = process.argv[4] || "2026-06-01";
 const baselineEnd = process.argv[5] || "2026-06-05";
-const requestedScope = process.argv[6];
-const { MAIN_TABLE, MX_REPORT_SOURCE, CUTOVER_DATE, apiCompleteness } = require('./sales_report_source');
+const requestedScopeArg = process.argv[6];
+const {
+  MAIN_TABLE,
+  MX_REPORT_SOURCE,
+  REPORT_SCOPES,
+  CUTOVER_DATE,
+  apiCompleteness,
+} = require('./sales_report_source');
 
 const scopes = {
   all: {
@@ -32,25 +38,18 @@ const scopes = {
     table: MAIN_TABLE,
     filter: "TRUE",
   },
-  us: {
-    title: "美国",
-    file: "us",
-    table: MAIN_TABLE,
-    filter: "TRIM(region) = 'United States'",
-  },
-  other: {
-    title: "其他国家",
-    file: "other_countries",
-    table: MAIN_TABLE,
-    filter: "TRIM(region) NOT IN ('United States', 'Mexico')",
-  },
-  mx: {
-    title: "墨西哥",
-    file: "mexico",
-    table: MX_REPORT_SOURCE,
-    filter: "TRUE",
-  },
+  ...Object.fromEntries(REPORT_SCOPES.map((config) => [config.key, {
+    ...config,
+    table: config.table === "mx" ? MX_REPORT_SOURCE : MAIN_TABLE,
+  }])),
 };
+
+// Keep the previous manual scope names working while the scheduled batch uses
+// the explicit five-region contract.
+const requestedScope = {
+  mx: "mexico",
+  other: "other_countries",
+}[requestedScopeArg] || requestedScopeArg;
 
 for (const value of [currentStart, currentEnd, baselineStart, baselineEnd]) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -61,7 +60,7 @@ for (const value of [currentStart, currentEnd, baselineStart, baselineEnd]) {
 }
 
 if (!requestedScope) {
-  for (const regionalScope of ["us", "other", "mx"]) {
+  for (const regionalScope of REPORT_SCOPES.map(({ key }) => key)) {
     execFileSync(
       process.execPath,
       [
@@ -80,18 +79,25 @@ if (!requestedScope) {
 
 const scope = requestedScope;
 if (!scopes[scope]) {
-  throw new Error("Scope must be one of: all, us, other, mx");
+  throw new Error("Scope must be one of: all, us, mexico|mx, uk, japan, other_countries|other");
 }
 
 const scopeConfig = scopes[scope];
 const TABLE = scopeConfig.table;
+const reportSuffix =
+  `${currentStart}_${currentEnd}_vs_${baselineStart}_${baselineEnd}`;
+const reportObjectPrefix = String(
+  process.env.MARKETPLACE_REPORT_OBJECT_PREFIX || "",
+).replace(/^\/+|\/+$/g, "");
+const reportBucket =
+  process.env.MARKETPLACE_REPORT_BUCKET || "feimei-marketplace-sales-reports";
 
 const out = path.join(
   ROOT_DIR,
   "generated",
   "web",
   "marketplace-sales-daily",
-  `marketplace_sales_${scopeConfig.file}_${currentStart}_${currentEnd}_vs_${baselineStart}_${baselineEnd}.html`,
+  `marketplace_sales_${scopeConfig.file}_${reportSuffix}.html`,
 );
 
 function query(sql) {
@@ -674,6 +680,28 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function reportHref(config) {
+  if (!reportObjectPrefix) {
+    return `marketplace_sales_${config.file}_${reportSuffix}.html`;
+  }
+  const bucket = encodeURIComponent(reportBucket);
+  const objectPath = [...reportObjectPrefix.split("/"), config.object]
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `https://storage.googleapis.com/${bucket}/${objectPath}`;
+}
+
+function reportNavigation() {
+  const links = REPORT_SCOPES.map((config) => {
+    const current = config.key === scope ? ' aria-current="page"' : "";
+    return `<a href="${escapeHtml(reportHref(config))}"${current}>${escapeHtml(config.title)}</a>`;
+  }).join("");
+  return `<nav class="report-switcher" aria-label="地区报告切换">
+    <span class="report-switcher-label">地区报告</span>
+    <div class="report-switcher-links">${links}</div>
+  </nav>`;
+}
+
 function groupBy(rows, key) {
   return rows.reduce((acc, row) => {
     const value = row[key];
@@ -1077,7 +1105,7 @@ if (currentStart >= CUTOVER_DATE && baselineEnd < CUTOVER_DATE) {
 }
 
 function countrySection(rows) {
-  if (scope !== "other" || !rows.length) return "";
+  if (scope !== "other_countries" || !rows.length) return "";
   return `<section class="brand-country-section">
     <div class="country-section-head">
       <div><h3>国家表现</h3><p>仅统计当前品牌，比较本期与前一周期销量变化。</p></div>
@@ -1956,6 +1984,7 @@ const html = `<!doctype html>
       <div class="date">${escapeHtml(dateLabel(currentStart, currentEnd))} vs ${escapeHtml(dateLabel(baselineStart, baselineEnd))}</div>
     </header>
     <p class="subhead">口径：pcs / 产品默认按 SPU / PRODUCT NAME 聚合 / SKU明细默认收起 / 当前期 ${escapeHtml(currentStart)} 至 ${escapeHtml(currentEnd)} / 对比期 ${escapeHtml(baselineStart)} 至 ${escapeHtml(baselineEnd)} / 产品影响占比按品牌内绝对波动计算 / 产品及SKU均展示渠道贡献 / 每个品牌展示近15天渠道趋势 / GMV不参与判断</p>
+    ${reportNavigation()}
     ${reportToolbar()}
     <section class="overview">
       <div class="metrics">

@@ -29,7 +29,14 @@ const STATE_FILE =
   process.env.MARKETPLACE_PERIOD_REPORT_STATE_FILE ||
   "/Users/skintific/private/runtime/marketplace-period-publisher/state.json";
 const REMOTE_STATE_OBJECT = process.env.MARKETPLACE_PERIOD_REMOTE_STATE_OBJECT || "";
-const { MAIN_TABLE, MX_TABLE, SOURCE_VERSION, CUTOVER_DATE, apiCompleteness } = require('../sales_report_source');
+const {
+  MAIN_TABLE,
+  MX_TABLE,
+  SOURCE_VERSION,
+  REPORT_SCOPES,
+  CUTOVER_DATE,
+  apiCompleteness,
+} = require('../sales_report_source');
 const TIME_ZONE = "Asia/Shanghai";
 let cachedAccessToken = null;
 let cloudAuthenticated = false;
@@ -194,7 +201,9 @@ function legacyCompleteness(reportEnd) {
           WHEN TRIM(region) = 'United States' THEN 'us'
           WHEN TRIM(region) = 'Mexico'
             AND UPPER(TRIM(channels)) = 'SHOPIFY' THEN 'mexico'
-          WHEN TRIM(region) NOT IN ('United States', 'Mexico') THEN 'other_countries'
+          WHEN TRIM(region) = 'United Kingdom' THEN 'uk'
+          WHEN TRIM(region) = 'Japan' THEN 'japan'
+          WHEN TRIM(region) NOT IN ('United States', 'Mexico', 'United Kingdom', 'Japan') THEN 'other_countries'
         END AS scope,
         date AS day,
         UPPER(TRIM(brand)) AS brand,
@@ -293,7 +302,9 @@ function reportMetrics(period) {
           WHEN TRIM(region) = 'United States' THEN 'us'
           WHEN TRIM(region) = 'Mexico'
             AND UPPER(TRIM(channels)) = 'SHOPIFY' THEN 'mexico'
-          WHEN TRIM(region) NOT IN ('United States', 'Mexico') THEN 'other_countries'
+          WHEN TRIM(region) = 'United Kingdom' THEN 'uk'
+          WHEN TRIM(region) = 'Japan' THEN 'japan'
+          WHEN TRIM(region) NOT IN ('United States', 'Mexico', 'United Kingdom', 'Japan') THEN 'other_countries'
         END AS scope,
         date,
         unit
@@ -328,7 +339,7 @@ function reportMetrics(period) {
     ORDER BY scope
   `);
   const metrics = Object.fromEntries(
-    ["us", "other_countries", "mexico"].map((scope) => [
+    REPORT_SCOPES.map(({ key: scope }) => [
       scope,
       { current_pcs: 0, baseline_pcs: 0, diff_pcs: 0, change_pct: null },
     ]),
@@ -350,11 +361,10 @@ function reportPaths(period) {
   const suffix =
     `${period.currentStart}_${period.currentEnd}_vs_` +
     `${period.baselineStart}_${period.baselineEnd}`;
-  return {
-    us: path.join(REPORT_DIR, `marketplace_sales_us_${suffix}.html`),
-    other_countries: path.join(REPORT_DIR, `marketplace_sales_other_countries_${suffix}.html`),
-    mexico: path.join(REPORT_DIR, `marketplace_sales_mexico_${suffix}.html`),
-  };
+  return Object.fromEntries(REPORT_SCOPES.map(({ key, file }) => [
+    key,
+    path.join(REPORT_DIR, `marketplace_sales_${file}_${suffix}.html`),
+  ]));
 }
 
 function generate(period, validation) {
@@ -367,7 +377,14 @@ function generate(period, validation) {
       period.baselineStart,
       period.baselineEnd,
     ],
-    { stdio: "inherit", env: { MARKETPLACE_REPORT_VALIDATION: JSON.stringify(validation) } },
+    {
+      stdio: "inherit",
+      env: {
+        MARKETPLACE_REPORT_VALIDATION: JSON.stringify(validation),
+        MARKETPLACE_REPORT_OBJECT_PREFIX: objectPrefix(period),
+        MARKETPLACE_REPORT_BUCKET: BUCKET,
+      },
+    },
   );
 }
 
@@ -496,14 +513,10 @@ function buildManifest(period, metrics, validation) {
     missing_sources: validation.missingSources,
     validation,
     source_version: SOURCE_VERSION,
-    reports: {
-      us: { ...metrics.us, url: publicUrl(`${prefix}/us.html`) },
-      other_countries: {
-        ...metrics.other_countries,
-        url: publicUrl(`${prefix}/other-countries.html`),
-      },
-      mexico: { ...metrics.mexico, url: publicUrl(`${prefix}/mexico.html`) },
-    },
+    reports: Object.fromEntries(REPORT_SCOPES.map(({ key, object }) => [
+      key,
+      { ...metrics[key], url: publicUrl(`${prefix}/${object}`) },
+    ])),
   };
 }
 
@@ -590,22 +603,18 @@ function buildDingTalkMessage(manifest) {
       ? ['> 对比提示：本期为 API 公司件数，对比期为原手工销量，来源口径存在切换。'] : []),
     "",
   ];
-  const labels = [
-    ["美国", manifest.reports.us],
-    ["其他国家", manifest.reports.other_countries],
-    ["墨西哥", manifest.reports.mexico],
-  ];
-  for (const [label, metric] of labels) {
+  for (const { key, title } of REPORT_SCOPES) {
+    const metric = manifest.reports[key];
     lines.push(
-      `- ${label}：${metric.current_pcs.toLocaleString("en-US")} pcs，` +
+      `- ${title}：${metric.current_pcs.toLocaleString("en-US")} pcs，` +
         `${signed(metric.diff_pcs)} / ${signedPercent(metric.change_pct)}`,
     );
   }
   lines.push(
     "",
-    `[查看美国报告](${manifest.reports.us.url})  |  ` +
-      `[查看其他国家报告](${manifest.reports.other_countries.url})  |  ` +
-      `[查看墨西哥报告](${manifest.reports.mexico.url})`,
+    REPORT_SCOPES
+      .map(({ key, title }) => `[查看${title}报告](${manifest.reports[key].url})`)
+      .join("  |  "),
   );
   return {
     title: `${manifest.data_complete ? "" : "【数据警告】"}Marketplace ${typeName}`,
@@ -695,25 +704,20 @@ async function main() {
         : period.mode === "mtd"
           ? "latest-mtd"
           : "latest-daily";
+    const reportUploads = (prefixName) => REPORT_SCOPES.map(({ key, object }) => [
+      paths[key], `${prefixName}/${object}`, "text/html; charset=utf-8",
+    ]);
     const uploads = [
-      [paths.us, `${prefix}/us.html`, "text/html; charset=utf-8"],
-      [paths.other_countries, `${prefix}/other-countries.html`, "text/html; charset=utf-8"],
-      [paths.mexico, `${prefix}/mexico.html`, "text/html; charset=utf-8"],
+      ...reportUploads(prefix),
       [manifestPath, `${prefix}/manifest.json`, "application/json; charset=utf-8"],
-      [paths.us, `${latestPrefix}/us.html`, "text/html; charset=utf-8"],
-      [paths.other_countries, `${latestPrefix}/other-countries.html`, "text/html; charset=utf-8"],
-      [paths.mexico, `${latestPrefix}/mexico.html`, "text/html; charset=utf-8"],
+      ...reportUploads(latestPrefix),
       [manifestPath, `${latestPrefix}/manifest.json`, "application/json; charset=utf-8"],
-      [paths.us, "latest/us.html", "text/html; charset=utf-8"],
-      [paths.other_countries, "latest/other-countries.html", "text/html; charset=utf-8"],
-      [paths.mexico, "latest/mexico.html", "text/html; charset=utf-8"],
+      ...reportUploads("latest"),
       [manifestPath, "latest/manifest.json", "application/json; charset=utf-8"],
     ];
     for (const [source, objectName, type] of uploads) upload(source, objectName, type);
     await Promise.all([
-      verifyUrl(manifest.reports.us.url, "text/html"),
-      verifyUrl(manifest.reports.other_countries.url, "text/html"),
-      verifyUrl(manifest.reports.mexico.url, "text/html"),
+      ...REPORT_SCOPES.map(({ key }) => verifyUrl(manifest.reports[key].url, "text/html")),
       verifyUrl(publicUrl(`${latestPrefix}/manifest.json`), "application/json"),
     ]);
     state.reports[reportKey] = { uploaded_at: new Date().toISOString(), source_version: SOURCE_VERSION };

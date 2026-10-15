@@ -10,9 +10,16 @@ regional HTML reports share `sales_report_source.js`.
 - Mexico: `feimei.mart_marketplace.fact_channel_sales_daily_mx`.
 - The Mart retains manual sales through 2026-09-24 and uses accepted API company
   units from 2026-09-25. Reports do not reimplement order eligibility or BOM rules.
-- US and other countries come from main; other countries exclude US and Mexico.
+- US, UK, Japan, and other countries come from the main Mart. Other countries
+  exclude US, Mexico, UK, and Japan.
 - Mexico excludes Shopify from the MX interface, then includes Shopify Mexico
   from main once. This preserves the report's historical comparison baseline.
+- The scheduled output order is US, Mexico, UK, Japan, and other countries;
+  the publisher writes five HTML reports and links all five in the DingTalk
+  summary.
+- Every HTML report includes the same five-region navigation. Standalone local
+  renders link to the sibling dated files; published renders use the canonical
+  dated Cloud Storage URLs so navigation also works from `latest*` copies.
 - `units` / `channel` are adapted to the renderer's `unit` / `channels` names.
   Missing `sku_zh` falls back through the existing product name / English SKU /
   company SKU display rules. No extra name join can multiply sales rows.
@@ -42,7 +49,7 @@ sends nor downloads/modifies remote publication state. HTML generation writes
 local generated outputs only. `BQ_BIN` and `QUARTO_BIN` can select installed CLIs.
 
 The deployment keeps schedule, recipients, and notification deduplication.
-`source_version` invalidates previously uploaded old-source HTML without
+`source_version` invalidates previously uploaded old-source or pre-navigation HTML without
 resetting notification receipts. No `--force` is needed for the source change;
 using it deliberately resends and must be separately requested.
 
