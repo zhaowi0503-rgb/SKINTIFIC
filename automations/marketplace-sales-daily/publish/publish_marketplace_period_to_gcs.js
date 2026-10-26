@@ -592,13 +592,14 @@ function buildDingTalkMessage(manifest) {
         : `${manifest.current_period.start} 至 ${manifest.current_period.end} vs ${manifest.baseline_period.start} 至 ${manifest.baseline_period.end}`
     }`,
     manifest.validation?.sourceVersion
-      ? `> 数据源：正式 API 销量表；${manifest.validation.sourceComplete ? `截止日采集已核验 ${manifest.validation.verifiedAccounts}/${manifest.validation.accountCount} 账户` : '截止日采集完整性待核验'}。销量为已匹配公司件数。`
+      ? `> 数据源：正式 API 销量表；${manifest.validation.sourceComplete ? `截止日活动账户采集及发布已核验 ${manifest.validation.verifiedAccounts}/${manifest.validation.activeAccountCount ?? manifest.validation.accountCount}` : '截止日完整覆盖尚未完成正式发布验收'}。销量为已匹配公司件数。`
       : manifest.data_complete
       ? "> 销量行检查：通过（不等同源端完整性证明）"
       : `> ⚠️ 数据完整性警告：${manifest.missing_sources
           .map(({ scope, brand, channel }) => `${scope} / ${brand} / ${channel}`)
           .join("、")}`,
     ...(manifest.validation?.warnings || []).map(warning => `> ⚠️ ${warning}`),
+    ...(manifest.validation?.notes || []).map(note => `> 说明：${note}`),
     ...(manifest.current_period.start >= CUTOVER_DATE && manifest.baseline_period.end < CUTOVER_DATE
       ? ['> 对比提示：本期为 API 公司件数，对比期为原手工销量，来源口径存在切换。'] : []),
     "",

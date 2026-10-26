@@ -7,6 +7,7 @@ function statuses() {
   return Array.from({ length: 31 }, (_, i) => ({
     account: `store-${i}`, platform: 'test', target_date: '2026-10-05',
     checked_at: '2026-10-06 11:18:03', complete_for_target: true, ready: true,
+    publication_state: 'UPDATED', company_units_complete_for_target: true,
     publication_run: 'test',
   }));
 }
@@ -14,6 +15,27 @@ test('verified zero-sale accounts do not require positive sales rows', () => {
   assert.equal(assessPublication(statuses(), [], period, now).dataComplete, true);
   const cliRows = statuses().map(row => ({ ...row, ready: 'true', complete_for_target: 'true' }));
   assert.equal(assessPublication(cliRows, [], period, now).dataComplete, true);
+});
+test('paused accounts are explicit notes and excluded only from active completion', () => {
+  const rows=statuses(); rows[0]={...rows[0],user_paused:'true',publication_state:'USER_PAUSED',ready:'false',complete_for_target:'false'};
+  const result=assessPublication(rows,[],period,now);
+  assert.equal(result.sourceComplete,true);assert.equal(result.verifiedAccounts,30);
+  assert.equal(result.activeAccountCount,30);assert.equal(result.allAccountsComplete,false);
+  assert.equal(result.warnings.length,0);assert.match(result.notes[0],/按用户确认暂停/);
+});
+test('unverified updated accounts and retained sales are not conflated', () => {
+  const rows=statuses();rows[0].complete_for_target=false;
+  rows[1]={...rows[1],ready:false,complete_for_target:false,publication_state:'CARRIED_FORWARD'};
+  const result=assessPublication(rows,[],period,now);
+  assert.equal(result.retainedAccounts,1);assert.equal(result.sourceComplete,false);
+  assert.ok(result.warnings.some(s=>s.includes('1个活动账户正式销量沿用旧版')));
+  assert.ok(result.warnings.some(s=>s.includes('1个活动账户已有销量发布')));
+});
+test('aftersales uncertainty does not masquerade as a collection failure', () => {
+  const rows=statuses();rows[0].company_units_complete_for_target=false;rows[0].pending_target_aftersales_lines=2;
+  const result=assessPublication(rows,[],period,now);
+  assert.equal(result.sourceComplete,true);assert.equal(result.dataComplete,false);
+  assert.match(result.warnings[0],/2条售后待核对/);
 });
 test('pending SKU quantities are not reported as complete company units', () => {
   const result = assessPublication(statuses(), [{ raw_quantity: '9' }], period, now);

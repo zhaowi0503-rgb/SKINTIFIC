@@ -1096,7 +1096,7 @@ const brands = brandMetrics.map((raw) => {
   };
 });
 
-const warnings = publicationValidation ? [...publicationValidation.warnings] : incompleteCoverageRows.map((row) => {
+const warnings = publicationValidation ? [...publicationValidation.warnings, ...(publicationValidation.notes || []).map(note => `说明：${note}`)] : incompleteCoverageRows.map((row) => {
   const latest = row.latestCurrentDate || "无当前期记录";
   return `${row.brand} / ${row.channel} 当前期数据仅到 ${latest}，未覆盖周期截止日 ${currentEnd}；该渠道及相关汇总可能偏低。`;
 });
@@ -1173,7 +1173,7 @@ function attentionPanel() {
   const weakestChannel = allChannels[0];
   const weakestProduct = allDragProducts[0];
   const warningLabel = publicationValidation
-    ? (publicationValidation.dataComplete ? "截止日采集已核验" : "请查看采集及待匹配提示")
+    ? (publicationValidation.sourceComplete ? "截止日活动账户采集及发布已核验" : "截止日正式发布尚未完整验收")
     : (warnings.length ? `${warnings.length} 项数据提醒` : "销量行检查通过");
 
   return `<section class="attention-strip" aria-labelledby="attention-title">
