@@ -38,7 +38,7 @@ test('aftersales uncertainty does not masquerade as a collection failure', () =>
   assert.match(result.warnings[0],/2条售后待核对/);
 });
 test('pending SKU quantities are not reported as complete company units', () => {
-  const result = assessPublication(statuses(), [{ raw_quantity: '9' }], period, now);
+  const result = assessPublication(statuses(), [{ decision: 'DEFERRED', reason: 'mapping_pending:missing_internal_bundle', raw_quantity: '9', lines: '2' }], period, now);
   assert.equal(result.sourceComplete, true);
   assert.equal(result.dataComplete, false);
   assert.equal(result.pendingRawQuantity, 9);
@@ -79,4 +79,16 @@ test('scheduled report contract has five non-overlapping regional outputs', () =
     REPORT_SCOPES.find(({ key }) => key === 'other_countries').filter,
     /United Kingdom.*Japan/,
   );
+});
+
+test('aftersales and unavailable Pending details are separated from mapping quantities', () => {
+  const rows=statuses();rows[0].company_units_complete_for_target=false;
+  const result=assessPublication(rows,[
+    {decision:'DEFERRED',reason:'mapping_pending:unknown_company_sku',raw_quantity:'3',lines:'2'},
+    {decision:'BLOCKED',reason:'early_aftersales:refund_quantity_exceeds_gross',raw_quantity:'8',lines:'1'},
+    {decision:'DEFERRED',reason:'pending_line_details_unavailable',raw_quantity:'0',lines:'4'},
+  ],period,now);
+  assert.equal(result.pendingRawQuantity,3);assert.equal(result.periodAftersalesLines,1);
+  assert.equal(result.pendingDetailLines,4);assert.equal(result.sourceComplete,true);
+  assert.equal(result.dataComplete,false);assert.ok(result.warnings.some(s=>s.includes('4 条 Amazon Pending')));
 });

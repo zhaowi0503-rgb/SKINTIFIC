@@ -73,7 +73,9 @@ const REPORT_SCOPES = Object.freeze([
 function assessPublication(statusRows, exceptionRows, period, now = new Date()) {
   const warnings = [];
   const notes = [];
-  const pending = exceptionRows.reduce((sum, row) => sum + Number(row.raw_quantity || 0), 0);
+  const pending = exceptionRows.filter(row => row.decision === 'DEFERRED' && String(row.reason || '').startsWith('mapping_pending:')).reduce((sum, row) => sum + Number(row.raw_quantity || 0), 0);
+  const missingDetails = exceptionRows.filter(row => row.reason === 'pending_line_details_unavailable').reduce((sum, row) => sum + Number(row.lines || 0), 0);
+  const periodAftersales = exceptionRows.filter(row => row.decision === 'BLOCKED' && String(row.reason || '').startsWith('early_aftersales:')).reduce((sum, row) => sum + Number(row.lines || 0), 0);
   const accountCount = new Set(statusRows.map(row => `${row.platform}/${row.account}`)).size;
   const inventoryComplete = statusRows.length === EXPECTED_ACCOUNTS && accountCount === EXPECTED_ACCOUNTS;
   const exactTarget = inventoryComplete && statusRows.every(row => row.target_date === period.currentEnd);
@@ -104,6 +106,8 @@ function assessPublication(statusRows, exceptionRows, period, now = new Date()) 
   const pendingAftersales = active.reduce((sum,row) => sum + Number(row.pending_target_aftersales_lines || 0),0);
   const quarantined = active.reduce((sum,row) => sum + Number(row.quarantined_target_orders || 0),0);
   if (pendingAftersales || quarantined) warnings.push(`截止日另有${pendingAftersales}条售后待核对、${quarantined}个隔离订单；正常订单继续发布，公司件数尚未最终核清。`);
+  if (periodAftersales) warnings.push(`本期或对比期有 ${periodAftersales} 条售后隔离记录，保留上次验收销量或暂缓计入；不属于待 SKU 匹配。`);
+  if (missingDetails) warnings.push(`本期或对比期有 ${missingDetails} 条 Amazon Pending 商品明细/数量不可用，不能按零证明完整。`);
   if (pending > 0) {
     warnings.push(`全部地区当前期或对比期合计 ${pending} 个原始商品数量待 SKU 匹配，尚未计入公司件数；该数量不是可直接补加的 pcs。`);
   }
@@ -121,6 +125,8 @@ function assessPublication(statusRows, exceptionRows, period, now = new Date()) 
     accountCount: statusRows.length,
     verifiedAccounts: exactTarget && fresh ? active.length - incomplete.length : 0,
     pendingRawQuantity: pending,
+    pendingDetailLines: missingDetails,
+    periodAftersalesLines: periodAftersales,
     missingSources: incomplete.map(row => ({ scope: 'account', brand: row.account, channel: row.platform })),
     warnings,
     notes,
@@ -138,12 +144,12 @@ function apiCompleteness(query, period) {
     user_paused, source_ready, company_units_complete_for_target,
     pending_target_aftersales_lines, quarantined_target_orders
     FROM \`feimei.mart_marketplace.order_sales_publication_status\``);
-  const exceptionRows = query(`SELECT decision, SUM(raw_quantity) AS raw_quantity
+  const exceptionRows = query(`SELECT decision, reason, COUNT(*) AS lines, SUM(raw_quantity) AS raw_quantity
     FROM \`feimei.mart_marketplace.order_sales_accepted_exceptions\`
     WHERE decision IN ('DEFERRED', 'BLOCKED') AND (
       sales_date BETWEEN DATE '${period.currentStart}' AND DATE '${period.currentEnd}'
       OR sales_date BETWEEN DATE '${period.baselineStart}' AND DATE '${period.baselineEnd}')
-    GROUP BY decision`);
+    GROUP BY decision, reason`);
   const result=assessPublication(statusRows, exceptionRows, period);
   const completion=query(`SELECT MIN(finished_at) AS first_complete_at
     FROM \`feimei.mart_marketplace.order_sales_refresh_audit\`
