@@ -39,7 +39,7 @@ Historical reports therefore show the scope of the evidence explicitly.
 ## Validation and operation
 
 ```sh
-node --test automations/marketplace-sales-daily/sales_report_source.test.js
+node --test automations/marketplace-sales-daily/sales_report_source.test.js automations/marketplace-sales-daily/publish/publish_marketplace_period_to_gcs.test.js
 node automations/marketplace-sales-daily/publish/publish_marketplace_period_to_gcs.js --mode mtd --report-end 2026-10-04 --dry-run
 node automations/marketplace-sales-daily/generate_marketplace_period_comparison_from_bq.js 2026-10-01 2026-10-04 2026-09-01 2026-09-04
 ```
@@ -47,6 +47,9 @@ node automations/marketplace-sales-daily/generate_marketplace_period_comparison_
 `--dry-run` reads BigQuery and prints a message preview. It neither uploads nor
 sends nor downloads/modifies remote publication state. HTML generation writes
 local generated outputs only. `BQ_BIN` and `QUARTO_BIN` can select installed CLIs.
+The DingTalk period summary is intentionally compact: it shows the title, five-region
+metrics, and report links. Detailed comparison, source, and validation evidence remains
+available in the HTML reports, manifest, dry-run validation object, and execution logs.
 
 The deployment keeps schedule, recipients, and notification deduplication.
 `source_version` invalidates previously uploaded old-source or pre-navigation HTML without

@@ -586,23 +586,6 @@ function buildDingTalkMessage(manifest) {
   const lines = [
     `# Marketplace ${typeName}｜${manifest.current_period.end}`,
     "",
-    `> 对比周期：${
-      manifest.report_type === "dod"
-        ? `${manifest.current_period.end} vs ${manifest.baseline_period.end}`
-        : `${manifest.current_period.start} 至 ${manifest.current_period.end} vs ${manifest.baseline_period.start} 至 ${manifest.baseline_period.end}`
-    }`,
-    manifest.validation?.sourceVersion
-      ? `> 数据源：正式 API 销量表；${manifest.validation.sourceComplete ? `截止日活动账户采集及发布已核验 ${manifest.validation.verifiedAccounts}/${manifest.validation.activeAccountCount ?? manifest.validation.accountCount}` : '截止日完整覆盖尚未完成正式发布验收'}。销量为已匹配公司件数。`
-      : manifest.data_complete
-      ? "> 销量行检查：通过（不等同源端完整性证明）"
-      : `> ⚠️ 数据完整性警告：${manifest.missing_sources
-          .map(({ scope, brand, channel }) => `${scope} / ${brand} / ${channel}`)
-          .join("、")}`,
-    ...(manifest.validation?.warnings || []).map(warning => `> ⚠️ ${warning}`),
-    ...(manifest.validation?.notes || []).map(note => `> 说明：${note}`),
-    ...(manifest.current_period.start >= CUTOVER_DATE && manifest.baseline_period.end < CUTOVER_DATE
-      ? ['> 对比提示：本期为 API 公司件数，对比期为原手工销量，来源口径存在切换。'] : []),
-    "",
   ];
   for (const { key, title } of REPORT_SCOPES) {
     const metric = manifest.reports[key];
@@ -748,7 +731,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.stack || error.message || String(error));
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.stack || error.message || String(error));
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { buildDingTalkMessage };
